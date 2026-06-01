@@ -53,3 +53,8 @@ typing_extensions==4.5.0
 urllib3==1.26.16
 Werkzeug==2.3.7
 wrapt==1.15.0
+
+fastapi
+uvicorn[standard]
+python-multipart
+future
