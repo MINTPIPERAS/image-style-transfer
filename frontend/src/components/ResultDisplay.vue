@@ -10,7 +10,7 @@ const emit = defineEmits(['restart'])
 <template>
   <Transition name="scale-fade">
     <div v-if="visible" class="result-panel">
-      <h2 class="result-title">✨ 风格迁移完成</h2>
+      <h2 class="result-title">✨ 风格迁移完成 ✨</h2>
 
       <div class="image-wrapper">
         <img :src="imageUrl" alt="风格化结果" class="result-img" />
