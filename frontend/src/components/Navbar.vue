@@ -1,17 +1,25 @@
 <script setup>
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '../stores/auth.js'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 const navLinks = [
   { name: 'Home', path: '/', label: '首页' },
   { name: 'Tool', path: '/tool', label: '风格迁移' },
+  { name: 'History', path: '/history', label: '我的作品', auth: true },
   { name: 'About', path: '/about', label: '关于' },
 ]
 
 function isActive(path) {
   return route.path === path
+}
+
+function handleLogout() {
+  authStore.logout()
+  router.push('/')
 }
 </script>
 
@@ -19,7 +27,7 @@ function isActive(path) {
   <nav class="navbar">
     <div class="nav-inner">
       <!-- Logo / 品牌名 -->
-      <router-link to="/" class="brand" @click.prevent>
+      <router-link to="/" class="brand">
         <span class="brand-icon">🎨</span>
         <span class="brand-text">IST</span>
         <span class="brand-sub">图像风格转换</span>
@@ -29,12 +37,24 @@ function isActive(path) {
       <div class="nav-links">
         <router-link
           v-for="link in navLinks"
+          v-show="!link.auth || authStore.isLoggedIn"
           :key="link.name"
           :to="link.path"
           class="nav-link"
           :class="{ active: isActive(link.path) }"
         >
           {{ link.label }}
+        </router-link>
+
+        <!-- 用户区域 -->
+        <template v-if="authStore.isLoggedIn">
+          <router-link to="/profile" class="nav-link user-link" :class="{ active: isActive('/profile') }">
+            👤 {{ authStore.username }}
+          </router-link>
+          <button class="nav-link logout-btn" @click="handleLogout">退出</button>
+        </template>
+        <router-link v-else to="/login" class="nav-link" :class="{ active: isActive('/login') }">
+          登录
         </router-link>
       </div>
     </div>
@@ -106,6 +126,7 @@ function isActive(path) {
 .nav-links {
   display: flex;
   gap: 4px;
+  align-items: center;
 }
 
 .nav-link {
@@ -126,5 +147,28 @@ function isActive(path) {
 .nav-link.active {
   background: var(--accent);
   color: #fff;
+}
+
+.user-link {
+  font-size: 13px;
+}
+
+.logout-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.6;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.logout-btn:hover {
+  opacity: 1;
+  background: var(--accent-bg);
+  color: #e74c3c;
 }
 </style>

@@ -1,8 +1,13 @@
 <script setup>
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth.js'
 import ImageUploadBox from '../components/ImageUploadBox.vue'
 import ProgressPanel from '../components/ProgressPanel.vue'
 import ResultDisplay from '../components/ResultDisplay.vue'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 // ---- 状态 ----
 const contentImage = ref(null)
@@ -40,14 +45,26 @@ async function startTransfer() {
   progress.value = { iteration: 0, total: 10, loss: 0 }
 
   try {
-    // 1. POST 上传图片，获取 task_id
+    // 使用登录后的 /api/convert/submit（如果已登录），否则用体验模式 /api/transfer
+    const endpoint = authStore.isLoggedIn ? '/api/convert/submit' : '/api/transfer'
+
     const formData = new FormData()
     formData.append('content_image', contentImage.value)
     formData.append('style_image', styleImage.value)
+    if (authStore.isLoggedIn) {
+      formData.append('style_type', 'custom')
+    }
 
-    const response = await fetch('/api/transfer', {
+    // 获取 access token
+    const headers = {}
+    if (authStore.isLoggedIn) {
+      headers['Authorization'] = `Bearer ${authStore.accessToken}`
+    }
+
+    const response = await fetch(endpoint, {
       method: 'POST',
       body: formData,
+      headers,
     })
 
     if (!response.ok) {
@@ -61,9 +78,13 @@ async function startTransfer() {
     const { task_id } = JSON.parse(rawText)
     console.log('task_id:', task_id)
 
-    // 2. 建立 SSE 连接，监听进度（直连后端，绕过 Vite 代理避免缓冲）
+    // SSE 连接监听进度（直连后端，绕过 Vite 代理避免缓冲）
     const baseUrl = 'http://127.0.0.1:8000'
-    eventSource = new EventSource(`${baseUrl}/api/transfer/stream/${task_id}`)
+    const streamEndpoint = authStore.isLoggedIn
+      ? `${baseUrl}/api/convert/task/${task_id}`
+      : `${baseUrl}/api/transfer/stream/${task_id}`
+
+    eventSource = new EventSource(streamEndpoint)
 
     eventSource.addEventListener('progress', (e) => {
       const data = JSON.parse(e.data)
@@ -125,6 +146,10 @@ onUnmounted(() => {
       <header class="tool-header">
         <h1>🎨 图像风格迁移</h1>
         <p class="subtitle">将艺术风格应用到您的照片上</p>
+        <p v-if="!authStore.isLoggedIn" class="login-hint">
+          💡 体验模式不保存记录 —
+          <router-link to="/login">登录</router-link> 后可使用全部功能
+        </p>
       </header>
 
       <main class="main-layout">
@@ -216,6 +241,22 @@ onUnmounted(() => {
   opacity: 0.55;
   margin: 0;
   font-size: 13px;
+}
+
+.login-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.6;
+  background: var(--accent-bg);
+  padding: 6px 12px;
+  border-radius: 8px;
+  display: inline-block;
+}
+
+.login-hint a {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 /* ---- 主布局 ---- */

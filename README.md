@@ -1,6 +1,6 @@
-# 🎨 Image Style Transfer — AI图像风格迁移
+# 🎨 Image Style Transfer — AI图像风格迁移 v2.0
 
-基于 VGG16 深度神经网络的图像风格迁移工具，提供 Web 交互界面，支持实时进度反馈。
+基于 VGG16 深度神经网络的图像风格迁移 Web 应用，支持多用户体系、JWT 认证、历史记录持久化存储。
 
 > 原始项目：[mozaffari-sadaf/image-style-transfer](https://github.com/mozaffari-sadaf/image-style-transfer)
 
@@ -10,49 +10,26 @@
 
 图像风格迁移（Neural Style Transfer）是一种利用卷积神经网络（CNN）将一张图片的**艺术风格**与另一张图片的**内容**相结合的技术。由 Gatys et al. 在 2015 年首次提出（[A Neural Algorithm of Artistic Style](https://arxiv.org/abs/1508.06576)）。
 
-本项目在原作基础上进行了大幅重构，将命令行脚本升级为**前后端分离的 Web 应用**，提供直观的图形界面和实时处理反馈。
+v2.0 在原有风格迁移核心基础上，新增了完整的用户体系与数据持久化能力。
 
 ---
 
-## 🆕 本项目的改进
+## ✨ v2.0 新功能
 
-### 架构升级
+### 用户体系
+- **注册/登录** — 用户名或邮箱登录，密码 bcrypt 加密存储
+- **JWT 认证** — Access Token（2h）+ Refresh Token（7d），自动续期
+- **个人中心** — 查看个人信息、修改密码
+- **权限校验** — 所有核心接口需要登录后使用
 
-| 项目 | 原始版本 | 当前版本 |
-|------|---------|---------|
-| 运行方式 | CLI 命令行脚本 | Web 应用（FastAPI + Vue 3） |
-| 参数传入 | `argparse` 命令行参数 | Web 表单上传图片 |
-| 结果展示 | `matplotlib` 弹窗保存 | 浏览器在线预览 + 下载 |
-| 进度反馈 | 终端 `print()` | 浏览器实时进度条 + Loss 曲线 |
-| 图片管理 | 手动放入 `images/` 目录 | 任意位置上传，自动 UUID 存储 |
+### 数据持久化
+- **SQLite 数据库** — 用户表 + 转换记录表（轻量级，免安装）
+- **文件隔离存储** — 每个用户独立目录 `storage/user_{id}/`
+- **历史记录** — 分页查看、大图预览、下载、删除（软删除）
 
-### 后端改进
-
-- **FastAPI Web 框架** — 替代原始的 `argparse` CLI，提供 RESTful API
-- **Subprocess 进程隔离** — 每次风格迁移在独立子进程中执行（`asyncio.create_subprocess_exec`），通过 stdout 管道 JSON 行通信，彻底避免 TF1 graph mode 的跨调用变量冲突
-- **Server-Sent Events (SSE)** — 实时推送每轮迭代的 iteration / total / loss
-- **文件管理** — 上传文件自动 UUID 前缀命名存入 `images/`，结果输出到 `outputs/`
-- **进度回调** — `transfer_style.py` 新增 `progress_callback` 参数，每轮迭代后回调
-- **跨域支持** — CORS 中间件，允许前端开发服务器跨域访问
-
-### 前端改进
-
-- **Vue 3 Composition API** — 组件化架构，`<script setup>` 语法
-- **Vue Router** — 多页面路由：首页（Home）、风格迁移工具（Tool）、关于（About）
-- **组件化 UI**：
-  - `Navbar` — 毛玻璃导航栏，品牌标识 + 页面跳转
-  - `ImageUploadBox` — 图片上传框，选中即预览，hover 显示更换/移除
-  - `ProgressPanel` — 旋转加载动画 + 进度条 + 迭代轮数徽章 + Loss 显示
-  - `ResultDisplay` — 结果图预览 + 下载 + 重新开始
-- **玻璃卡片设计** — `backdrop-filter` 毛玻璃效果，黄/绿/粉三色晕染背景
-- **响应式布局** — CSS Grid 左右分栏，视口高度约束
-- **Vite 代理** — 开发环境代理 `/api` 到后端 `127.0.0.1:8000`
-
-### 工程化
-
-- 前后端分离，独立启动，Vite 代理转发
-- `transfer_style.py` 从独立脚本重构为可调用模块（`process_image()` 函数）
-- `requirements.txt` 补充 `fastapi`、`uvicorn`、`python-multipart`、`future` 依赖
+### 体验模式
+- 未登录用户仍可使用风格迁移（调用 `/api/transfer`），但不保存记录
+- 登录后转换结果自动存入"我的作品"
 
 ---
 
@@ -60,43 +37,71 @@
 
 ```
 image-style-transfer/
-├── app.py                    # FastAPI 后端入口（API + SSE + subprocess 管理）
-├── run_transfer.py           # 子进程执行脚本（独立进程，stdout JSON 通信）
-├── transfer_style.py         # 风格迁移核心模块
-├── requirements.txt          # Python 依赖
+├── app/                        # FastAPI 后端包 (v2.0)
+│   ├── main.py                 # 应用入口（路由注册、CORS、生命周期）
+│   ├── config.py               # 配置管理（.env 支持）
+│   ├── database.py             # SQLAlchemy + SQLite 连接
+│   ├── models/
+│   │   ├── user.py             # 用户表 ORM 模型
+│   │   └── conversion.py       # 转换记录表 ORM 模型
+│   ├── schemas/
+│   │   ├── user.py             # Pydantic 请求/响应校验
+│   │   └── conversion.py       # 转换记录校验
+│   ├── routers/
+│   │   ├── auth.py             # 认证路由（注册/登录/刷新/登出）
+│   │   ├── users.py            # 用户路由（个人信息/修改密码）
+│   │   └── convert.py          # 转换路由（上传/提交/SSE/历史/删除 + 体验模式）
+│   ├── services/
+│   │   ├── auth_service.py     # 密码哈希、JWT 生成验证
+│   │   └── convert_service.py  # 文件管理、记录 CRUD
+│   └── middleware/
+│       └── auth.py             # JWT 认证依赖注入
+├── frontend/                   # Vue 3 前端
+│   ├── src/
+│   │   ├── main.js             # 入口（Pinia + Router）
+│   │   ├── App.vue             # 根布局
+│   │   ├── style.css           # 全局样式
+│   │   ├── api/
+│   │   │   └── index.js        # Axios 实例 + JWT 拦截器
+│   │   ├── stores/
+│   │   │   └── auth.js         # Pinia 认证状态管理
+│   │   ├── router/
+│   │   │   └── index.js        # 路由配置
+│   │   ├── components/
+│   │   │   ├── Navbar.vue      # 导航栏（含登录状态）
+│   │   │   ├── ImageUploadBox.vue
+│   │   │   ├── ProgressPanel.vue
+│   │   │   └── ResultDisplay.vue
+│   │   └── views/
+│   │       ├── HomePage.vue    # 首页
+│   │       ├── ToolPage.vue    # 风格迁移工具页
+│   │       ├── AboutPage.vue   # 关于页面
+│   │       ├── LoginPage.vue   # 登录/注册页
+│   │       ├── ProfilePage.vue # 个人中心
+│   │       └── HistoryPage.vue # 历史作品
+│   ├── vite.config.js
+│   └── package.json
+├── transfer_style.py           # 风格迁移核心算法
+├── run_transfer.py             # 子进程执行脚本（stdout JSON 通信）
 ├── models/
-│   └── vgg.py                # VGG16 平均池化模型定义
+│   └── vgg.py                  # VGG16 平均池化模型
 ├── utils/
-│   ├── image_utils.py        # 图片加载与预处理工具
-│   └── style_utils.py        # 风格损失（Gram 矩阵）计算
-├── unittest/
-│   └── test_style_transfer.py
-├── images/                   # 示例图片 + 用户上传图片（UUID 前缀防冲突）
-├── outputs/                  # 风格迁移结果（运行时生成）
-└── frontend/                 # Vue 3 前端
-    ├── index.html
-    ├── vite.config.js        # Vite 配置（含 API 代理）
-    ├── package.json
-    └── src/
-        ├── main.js           # 入口
-        ├── App.vue           # 根布局（背景 + Navbar + router-view）
-        ├── style.css         # 全局样式 + 晕染背景 + 玻璃卡片
-        ├── router/
-        │   └── index.js      # 路由配置
-        ├── components/
-        │   ├── Navbar.vue         # 导航栏
-        │   ├── ImageUploadBox.vue # 图片上传框
-        │   ├── ProgressPanel.vue  # 进度面板
-        │   └── ResultDisplay.vue  # 结果展示
-        └── views/
-            ├── HomePage.vue       # 首页
-            ├── ToolPage.vue       # 风格迁移工具页
-            └── AboutPage.vue      # 关于页面
+│   ├── image_utils.py          # 图片加载与预处理
+│   └── style_utils.py          # 风格损失（Gram 矩阵）
+├── images/                     # 上传图片临时目录
+├── outputs/                    # 转换结果输出目录
+├── storage/                    # 用户隔离文件存储 (v2.0)
+│   └── user_{id}/              # 按用户ID隔离
+├── data.db                     # SQLite 数据库文件（自动创建）
+├── .env                        # 环境变量配置
+├── requirements.txt            # Python 依赖
+└── docs/
+    └── PRD.md                  # 产品需求文档
 ```
 
 ---
 
-## 🚀 运行方法
+## 🚀 快速开始
 
 ### 环境要求
 
@@ -117,7 +122,7 @@ conda activate style-transfer
 pip install -r requirements.txt
 ```
 
-> **注意**：`tensorflow==2.13.0` 需要根据你的 CUDA 版本调整。如果没有 GPU，安装 CPU 版本：
+> **注意**：`tensorflow==2.13.0` 需要根据 CUDA 版本调整。如无 GPU：
 > ```bash
 > pip install tensorflow-cpu==2.13.0
 > ```
@@ -129,40 +134,166 @@ cd frontend
 npm install
 ```
 
-### 4. 启动后端
+### 4. 配置环境变量
 
-```bash
-# 在项目根目录，确保 conda 环境已激活
-python app.py
+编辑项目根目录的 `.env` 文件（已生成默认值）：
+
+```env
+SECRET_KEY=change-me-to-a-random-string  # 生产环境务必修改
+DATABASE_URL=sqlite:///./data.db
+STORAGE_DIR=./storage
+MAX_UPLOAD_SIZE_MB=10
+DEFAULT_ITERATIONS=10
+FRONTEND_URL=http://localhost:5173
 ```
 
-后端默认运行在 `http://127.0.0.1:8000`
-
-### 5. 启动前端开发服务器
+### 5. 启动后端
 
 ```bash
-# 新开终端，cd 到 frontend 目录
+# 在项目根目录，conda 环境已激活
+python -m app.main
+```
+
+后端运行在 `http://127.0.0.1:8000`，首次启动自动创建数据库表。
+
+### 6. 启动前端
+
+```bash
+# 新终端，cd 到 frontend 目录
 cd frontend
 npm run dev
 ```
 
-前端默认运行在 `http://localhost:5173`
+前端运行在 `http://localhost:5173`
 
-### 6. 打开浏览器
+### 7. 使用
 
-访问 **http://localhost:5173** 即可使用。
+浏览器访问 **http://localhost:5173**
 
-> ⚠️ 务必通过前端地址访问（`localhost:5173`），不要直接打开 HTML 文件，否则 API 代理不会生效。
+1. 点击右上角"登录"注册账号
+2. 进入"风格迁移"页面上传内容图和风格图
+3. 点击"开始风格迁移"等待完成
+4. 在"我的作品"中查看历史记录
 
 ---
 
-## 📡 API 接口
+## 📡 API 接口文档
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/transfer` | 上传内容图 + 风格图，返回 `task_id` |
-| `GET` | `/api/transfer/stream/{task_id}` | SSE 流式推送处理进度 |
-| `GET` | `/api/output/{filename}` | 获取结果图片文件 |
+### 认证与用户
+
+| 方法 | 端点 | 认证 | 说明 |
+|------|------|------|------|
+| `POST` | `/api/auth/register` | 否 | 注册（返回 Token） |
+| `POST` | `/api/auth/login` | 否 | 登录（返回 Token） |
+| `POST` | `/api/auth/refresh` | 否 | 刷新 Token |
+| `POST` | `/api/auth/logout` | 是 | 登出 |
+| `GET` | `/api/users/me` | 是 | 获取个人信息 |
+| `PUT` | `/api/users/me/password` | 是 | 修改密码 |
+
+#### 注册示例
+
+```json
+POST /api/auth/register
+{
+  "username": "demo",
+  "email": "demo@example.com",
+  "password": "123456"
+}
+
+Response 201:
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+#### 登录示例
+
+```json
+POST /api/auth/login
+{
+  "login": "demo",          // 用户名或邮箱均可
+  "password": "123456"
+}
+
+Response 200:
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+### 图片转换
+
+| 方法 | 端点 | 认证 | 说明 |
+|------|------|------|------|
+| `POST` | `/api/convert/upload` | 是 | 上传图片到用户存储 |
+| `POST` | `/api/convert/submit` | 是 | 提交转换任务（multipart） |
+| `GET` | `/api/convert/task/{id}` | 否 | SSE 进度流 |
+| `GET` | `/api/convert/history` | 是 | 历史记录（分页） |
+| `DELETE` | `/api/convert/record/{id}` | 是 | 删除记录 |
+| `GET` | `/api/output/{filename}` | 否 | 获取结果图片 |
+| `GET` | `/api/storage/user/{uid}/{fn}` | 否 | 获取用户存储文件 |
+
+#### 上传提交转换（已登录）
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/convert/submit \
+  -H "Authorization: Bearer <access_token>" \
+  -F "content_image=@photo.jpg" \
+  -F "style_image=@style.png" \
+  -F "style_type=custom"
+
+# Response: { "task_id": "a1b2c3..." }
+```
+
+#### SSE 监听进度
+
+```javascript
+const es = new EventSource('http://127.0.0.1:8000/api/convert/task/{task_id}')
+es.addEventListener('progress', e => console.log(JSON.parse(e.data)))
+// { "iteration": 3, "total": 10, "loss": 1234.56 }
+es.addEventListener('complete', e => console.log('done:', JSON.parse(e.data).filename))
+```
+
+#### 体验模式（无需登录）
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/transfer \
+  -F "content_image=@photo.jpg" \
+  -F "style_image=@style.png"
+
+# SSE: GET /api/transfer/stream/{task_id}
+```
+
+#### 历史记录
+
+```json
+GET /api/convert/history?page=1&page_size=12
+Authorization: Bearer <access_token>
+
+Response 200:
+{
+  "items": [
+    {
+      "id": 1,
+      "original_filename": "photo.jpg",
+      "style_type": "custom",
+      "original_size": 245760,
+      "result_size": 180224,
+      "status": "completed",
+      "created_at": "2026-06-16T12:00:00",
+      "result_url": "/api/output/styled_abc.png",
+      "original_url": "/api/storage/user/1/uuid_photo.jpg"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 12
+}
+```
 
 ### SSE 事件类型
 
@@ -174,70 +305,23 @@ npm run dev
 
 ---
 
-## 🪲 BUG 调试记录
+## 🔐 安全设计
 
-### #1 核心难题：TF1 Graph Mode 变量冲突导致子进程崩溃
-
-**现象**：后端连续返回 200 OK，但风格迁移无法正常完成。终端充斥以下 TF 警告：
-
-```
-Operation 'Variable/Assign' was changed by setting attribute after it was run
-by a session. This mutation will have no effect, and will trigger an error in
-the future. Either don't modify nodes after running them or create a new session.
-
-→ Variable → Variable_1 → Variable_2 → ... → Variable_N → 进程崩溃
-```
-
-**根因**：原始项目使用 `tf.compat.v1.disable_eager_execution()` 运行在 TF1 graph mode。每次 `process_image()` 调用都会在全局默认图中创建 VGG16 变量节点。服务长期运行期间，多次调用导致变量名累积冲突，最终图操作无法执行。
-
-原始 CLI 脚本没有此问题，因为每次运行是独立进程，退出即销毁 TF 图。
-
-**❌ 错误路线 1**：在 `process_image()` 结尾加 `K.clear_session()` → 无效，线程环境下图状态无法完全重置。
-
-**❌ 错误路线 2**：`multiprocessing.Process` + `mp.Queue` + progress_callback → 仍然失败。`mp.Queue` 在 Windows spawn 模式下通过后台 feeder 线程工作，progress_callback 将跨进程对象引入 TF 图线程上下文，仍导致阻塞。
-
-**✅ 最终修复**：**`asyncio.create_subprocess_exec` + stdout 管道通信**
-
-- 每次创建全新的 Python 子进程运行 `run_transfer.py`
-- 进度通过 `print(JSON, flush=True)` 写到 stdout
-- 父进程通过 `process.stdout.readline()` 异步逐行读取
-- 子进程退出后 TF 图随进程彻底销毁
-
-```
-app.py (父进程)        run_transfer.py (子进程)
-    │                        │
-    ├─ subprocess_exec ────→ │ import transfer_style
-    │                        │ process_image()
-    │   stdout ◂──── JSON ── │   progress_callback
-    │   .readline()          │     → print(JSON, flush)
-    │                        │
-    │   ◂── EOF / exit ────→ X (进程退出, TF 图销毁)
-```
-
-### #2 Vite 代理缓冲 SSE 导致前端收不到进度
-
-**现象**：后端 SSE 正常推送，但浏览器 EventSource 超时断开，前端显示"请求失败"。
-
-**根因**：Vite 开发服务器使用 `http-proxy` 转发请求，默认缓冲 `text/event-stream` 响应，导致 SSE 事件无法实时到达浏览器。
-
-**修复**：SSE 连接绕过 Vite 代理，直连后端 `http://127.0.0.1:8000`（CORS 已开启）。POST 上传仍走代理，不影响。
-
-### #3 前端上传后图片路径不一致
-
-**现象**：用户期望上传图片存入 `images/` 目录，但实际存入了 `uploads/`。
-
-**根因**：`app.py` 中 `UPLOAD_DIR = Path("uploads")`，与原始项目约定不一致。
-
-**修复**：改为 `UPLOAD_DIR = Path("images")`，UUID 前缀命名保证不与示例图片冲突。
+- **密码加密**：bcrypt 哈希，不可逆
+- **JWT**：Access Token 2 小时，Refresh Token 7 天
+- **文件隔离**：每个用户独立目录 `storage/user_{id}/`
+- **文件校验**：仅允许 jpg/png/webp，限制 10MB
+- **软删除**：删除记录标记 `is_deleted`，非物理删除
+- **CORS**：仅允许配置的前端地址跨域
 
 ---
 
 ## 🧠 技术原理
 
-1. **VGG16 特征提取** — 使用预训练 VGG16，浅层 `conv1` 层捕获纹理风格，深层捕获内容结构
+1. **VGG16 特征提取** — 预训练 VGG16，浅层 `conv1` 层捕获纹理风格，深层捕获内容结构
 2. **内容损失** — 生成图与内容图在高层特征的 MSE 差异
-3. **风格损失** — 通过 Gram 矩阵衡量生成图与风格图在纹理统计上的差异
-4. **L-BFGS 优化** — 拟牛顿法迭代优化像素值，最小化加权总损失（10 轮迭代，每轮 20 次函数评估）
+3. **风格损失** — Gram 矩阵衡量纹理统计差异
+4. **L-BFGS 优化** — 拟牛顿法迭代优化像素值（默认 10 轮，每轮 20 次函数评估）
 
 ---
 
@@ -245,13 +329,29 @@ app.py (父进程)        run_transfer.py (子进程)
 
 | 层级 | 技术 |
 |------|------|
-| 深度学习 | TensorFlow 2.13 / Keras 2.13 / SciPy (L-BFGS) |
-| 后端 | FastAPI / Uvicorn / SSE (Server-Sent Events) |
-| 前端 | Vue 3 (Composition API) / Vue Router / Vite |
-| 样式 | CSS Grid / backdrop-filter 毛玻璃 / CSS 动画 |
+| 深度学习 | TensorFlow 2.13 / Keras 2.13 / SciPy |
+| 后端框架 | FastAPI / Uvicorn |
+| 认证 | python-jose (JWT) / passlib (bcrypt) |
+| 数据库 | SQLite + SQLAlchemy ORM |
+| 前端 | Vue 3 (Composition API) / Pinia / Vue Router / Vite |
+| HTTP | Axios（JWT 自动拦截器） |
+| 实时通信 | Server-Sent Events (SSE) |
+
+---
+
+## 🪲 已知问题与记录
+
+### TF1 Graph Mode 变量冲突
+
+本项目使用 `tf.compat.v1.disable_eager_execution()`（graph mode），每次调用会创建 VGG16 变量节点。
+**解决方案**：每次风格迁移在独立子进程中执行（`asyncio.create_subprocess_exec` + `run_transfer.py`），进程退出后 TF 图彻底销毁。
+
+### Vite 代理 SSE 缓冲
+
+Vite 开发服务器默认缓冲 `text/event-stream` 响应。**解决方案**：SSE 直连后端 `127.0.0.1:8000`，不走 Vite 代理。
 
 ---
 
 ## 📄 许可证
 
-本项目基于原始项目 [mozaffari-sadaf/image-style-transfer](https://github.com/mozaffari-sadaf/image-style-transfer) 修改，遵循 MIT 协议。
+基于原始项目 [mozaffari-sadaf/image-style-transfer](https://github.com/mozaffari-sadaf/image-style-transfer)，遵循 MIT 协议。
