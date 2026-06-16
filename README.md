@@ -105,11 +105,9 @@ image-style-transfer/
 
 ### 环境要求
 
-| 组件 | 版本要求 |
-|------|---------|
-| Python | 3.8+（推荐 Conda） |
-| Node.js | 18+ |
-| 操作系统 | Windows / macOS / Linux |
+- **Python 3.8+**（推荐使用 Conda 虚拟环境 3.10版本以上Py可能会部分依赖不兼容 建议3.8 - 3.10）
+- **Node.js 18+**（前端构建）
+- 操作系统：Windows / macOS / Linux
 
 ### 1. 创建 Conda 虚拟环境
 
