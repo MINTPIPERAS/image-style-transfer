@@ -74,7 +74,19 @@ function formatSize(bytes) {
 
 function changePage(p) {
   page.value = p
+  jumpPage.value = p
   loadRecords()
+}
+
+// ---- 跳转指定页 ----
+const jumpPage = ref(1)
+
+function jumpToPage() {
+  const p = Math.max(1, Math.min(totalPages(), parseInt(jumpPage.value) || 1))
+  jumpPage.value = p
+  if (p !== page.value) {
+    changePage(p)
+  }
 }
 
 const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize.value))
@@ -139,8 +151,19 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize.value))
       <!-- 分页 -->
       <div v-if="total > pageSize" class="pagination">
         <button :disabled="page <= 1" @click="changePage(page - 1)">← 上一页</button>
-        <span>{{ page }} / {{ totalPages() }}</span>
+        <span class="page-info">{{ page }} / {{ totalPages() }}</span>
         <button :disabled="page >= totalPages()" @click="changePage(page + 1)">下一页 →</button>
+        <span class="jump-sep">跳至</span>
+        <input
+          class="jump-input"
+          type="number"
+          :min="1"
+          :max="totalPages()"
+          v-model.number="jumpPage"
+          @keyup.enter="jumpToPage"
+          placeholder="页"
+        />
+        <button class="jump-btn" @click="jumpToPage">Go</button>
       </div>
     </div>
 
@@ -341,8 +364,9 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize.value))
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 10px;
   padding: 24px 0 40px;
+  flex-wrap: wrap;
 }
 
 .pagination button {
@@ -366,9 +390,47 @@ const totalPages = () => Math.max(1, Math.ceil(total.value / pageSize.value))
   color: var(--accent);
 }
 
-.pagination span {
+.pagination .page-info {
   font-size: 14px;
   color: var(--text);
+  min-width: 60px;
+  text-align: center;
+}
+
+.jump-sep {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.45;
+  margin-left: 4px;
+}
+
+.jump-input {
+  width: 52px;
+  padding: 7px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--sans);
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.jump-input::-webkit-outer-spin-button,
+.jump-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.jump-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.jump-btn {
+  padding: 7px 12px !important;
+  font-size: 13px !important;
 }
 
 /* 预览遮罩 */
