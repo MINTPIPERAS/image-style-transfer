@@ -10,4 +10,22 @@ __pycache__/
 # Ignore virtual environment directories
 venv/
 
+# Database (auto-generated)
+data.db
+
+# User file storage
+storage/
+
+# Style transfer outputs (generated at runtime)
+outputs/
+
+# Uploaded images (generated at runtime, except sample images)
+images/*
+!images/CAT.png
+!images/MIKU.png
+!images/city.png
+!images/style1.png
+!images/style2.png
+!images/style3.png
+
 .idea/

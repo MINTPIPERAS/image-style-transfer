@@ -58,3 +58,16 @@ fastapi
 uvicorn[standard]
 python-multipart
 future
+
+# JWT 认证 + 密码加密
+python-jose[cryptography]
+bcrypt
+
+# 数据库 ORM
+sqlalchemy
+
+# 数据校验
+email-validator
+
+# 环境变量
+python-dotenv
