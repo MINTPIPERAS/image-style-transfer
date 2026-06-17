@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 
-from app.config import DEFAULT_ITERATIONS
+from app.config import DEFAULT_ITERATIONS, PRESET_STYLES
 from app.middleware.auth import get_current_user, get_optional_user
 from app.models.user import User
 from app.models.conversion import ConversionRecord
@@ -39,6 +39,32 @@ def _cleanup_task(task_id: str):
     with tasks_lock:
         if task_id in tasks:
             del tasks[task_id]
+
+
+# ============================================================
+#  预设风格
+# ============================================================
+@router.get("/styles")
+async def list_preset_styles():
+    """返回 4 种预设风格列表 + 自定义选项."""
+    presets = []
+    for style_id, info in PRESET_STYLES.items():
+        presets.append({
+            "id": style_id,
+            "name": info["name"],
+            "file": info["file"],
+            "thumbnail_url": f"/api/preset/{info['file']}",
+        })
+    return {"presets": presets}
+
+
+@router.get("/preset/{filename}")
+async def get_preset_image(filename: str):
+    """提供预设风格图片的缩略图."""
+    preset_path = UPLOAD_DIR / filename
+    if not preset_path.exists():
+        raise HTTPException(status_code=404, detail="预设风格不存在")
+    return FileResponse(preset_path)
 
 
 # ============================================================
@@ -84,26 +110,43 @@ async def upload_image(
 @router.post("/convert/submit")
 async def submit_transfer(
     content_image: UploadFile = File(...),
-    style_image: UploadFile = File(...),
-    style_type: str = Form(default="custom"),
+    style_image: UploadFile | None = File(None),
+    style_preset: str | None = Form(None),
+    style_name: str = Form(default="custom"),
     current_user: User = Depends(get_current_user),
 ):
-    """提交风格迁移任务，返回 task_id 供 SSE 监听进度."""
-    # 保存上传文件
+    """提交风格迁移任务，返回 task_id 供 SSE 监听进度。支持预设风格或自定义上传."""
+    # 解析风格图：预设优先，否则使用上传
+    if style_preset and style_preset in PRESET_STYLES:
+        preset = PRESET_STYLES[style_preset]
+        style_path = UPLOAD_DIR / preset["file"]
+        if not style_path.exists():
+            raise HTTPException(status_code=400, detail=f"预设风格文件不存在: {preset['file']}")
+        style_bytes = style_path.read_bytes()
+        style_filename = preset["file"]
+        style_label = preset["name"]
+    elif style_image:
+        style_bytes = await style_image.read()
+        style_filename = style_image.filename
+        style_label = style_name if style_name != "custom" else "自定义风格"
+    else:
+        raise HTTPException(status_code=400, detail="请选择预设风格或上传风格图片")
+
     content_bytes = await content_image.read()
-    style_bytes = await style_image.read()
 
     prefix = uuid.uuid4().hex[:8]
     content_filename = f"{prefix}_{content_image.filename}"
-    style_filename = f"{prefix}_{style_image.filename}"
-
     content_path = UPLOAD_DIR / content_filename
-    style_path = UPLOAD_DIR / style_filename
 
     with open(content_path, "wb") as f:
         f.write(content_bytes)
-    with open(style_path, "wb") as f:
-        f.write(style_bytes)
+
+    # 如果是自定义上传的风格图，需要保存
+    if style_image is not None:
+        style_save_path = UPLOAD_DIR / f"{prefix}_{style_filename}"
+        with open(style_save_path, "wb") as f:
+            f.write(style_bytes)
+        style_path = style_save_path
 
     original_size = len(content_bytes)
 
@@ -129,7 +172,7 @@ async def submit_transfer(
             "original_filename": content_image.filename,
             "original_path": str(content_path),
             "original_size": original_size,
-            "style_type": style_type,
+            "style_type": style_label,
         }
 
     asyncio.create_task(
@@ -344,23 +387,39 @@ async def delete_record(
 @router.post("/transfer")
 async def transfer_style_api_legacy(
     content_image: UploadFile = File(...),
-    style_image: UploadFile = File(...),
+    style_image: UploadFile | None = File(None),
+    style_preset: str | None = Form(None),
+    style_name: str = Form(default="custom"),
 ):
     """体验模式风格迁移（无需登录，不保存记录）."""
-    prefix = uuid.uuid4().hex[:8]
-    content_filename = f"{prefix}_{content_image.filename}"
-    style_filename = f"{prefix}_{style_image.filename}"
-
-    content_path = UPLOAD_DIR / content_filename
-    style_path = UPLOAD_DIR / style_filename
+    # 解析风格图
+    if style_preset and style_preset in PRESET_STYLES:
+        preset = PRESET_STYLES[style_preset]
+        style_path = UPLOAD_DIR / preset["file"]
+        if not style_path.exists():
+            raise HTTPException(status_code=400, detail=f"预设风格文件不存在: {preset['file']}")
+        style_bytes = style_path.read_bytes()
+        style_filename = preset["file"]
+    elif style_image:
+        style_bytes = await style_image.read()
+        style_filename = style_image.filename
+    else:
+        raise HTTPException(status_code=400, detail="请选择预设风格或上传风格图片")
 
     content_bytes = await content_image.read()
-    style_bytes = await style_image.read()
+
+    prefix = uuid.uuid4().hex[:8]
+    content_filename = f"{prefix}_{content_image.filename}"
+    content_path = UPLOAD_DIR / content_filename
 
     with open(content_path, "wb") as f:
         f.write(content_bytes)
-    with open(style_path, "wb") as f:
-        f.write(style_bytes)
+
+    if style_image is not None:
+        style_save_path = UPLOAD_DIR / f"{prefix}_{style_filename}"
+        with open(style_save_path, "wb") as f:
+            f.write(style_bytes)
+        style_path = style_save_path
 
     process = await asyncio.create_subprocess_exec(
         sys.executable,

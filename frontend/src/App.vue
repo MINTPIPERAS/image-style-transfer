@@ -23,7 +23,5 @@ import Navbar from './components/Navbar.vue'
 .page-content {
   height: 100svh;
   box-sizing: border-box;
-  position: relative;
-  z-index: 1;
 }
 </style>

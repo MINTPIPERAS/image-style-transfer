@@ -28,3 +28,11 @@ DEFAULT_ITERATIONS = int(os.getenv("DEFAULT_ITERATIONS", "10"))
 
 # CORS 允许的前端地址
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+# 预设风格（名称 → 文件名，文件位于 images/ 目录）
+PRESET_STYLES = {
+    "van_gogh":     {"name": "梵高",       "file": "style1.png"},
+    "afremov":      {"name": "阿夫列莫夫", "file": "style2.png"},
+    "picasso":      {"name": "毕加索",     "file": "style3.png"},
+    "monet":        {"name": "莫奈",       "file": "style4.jpg"},
+}
