@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onUnmounted, watch } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import ImageUploadBox from '../components/ImageUploadBox.vue'
+import StyleSelector from '../components/StyleSelector.vue'
 import ProgressPanel from '../components/ProgressPanel.vue'
 import ResultDisplay from '../components/ResultDisplay.vue'
 
@@ -11,16 +12,27 @@ const authStore = useAuthStore()
 
 // ---- 状态 ----
 const contentImage = ref(null)
-const styleImage = ref(null)
+const styleImage = ref(null)           // File 对象（用于预览）
+const styleMeta = ref(null)            // { type, presetId?, name, file? }
+const showStyleSelector = ref(false)
 const isProcessing = ref(false)
 const resultImageUrl = ref('')
 const progress = ref({ iteration: 0, total: 10, loss: 0 })
 const errorMessage = ref('')
 
+// 风格预览 URL（非 File 对象时手动创建）
+const stylePreviewUrl = ref('')
+
 let eventSource = null
 
 // ---- 计算属性 ----
 const canSubmit = computed(() => contentImage.value && styleImage.value && !isProcessing.value)
+
+// 风格的显示标签
+const styleLabel = computed(() => {
+  if (!styleMeta.value) return ''
+  return styleMeta.value.name || '自定义风格'
+})
 
 // ---- 方法 ----
 function resetAll() {
@@ -28,12 +40,51 @@ function resetAll() {
     eventSource.close()
     eventSource = null
   }
+  if (stylePreviewUrl.value) {
+    URL.revokeObjectURL(stylePreviewUrl.value)
+    stylePreviewUrl.value = ''
+  }
   contentImage.value = null
   styleImage.value = null
+  styleMeta.value = null
   resultImageUrl.value = ''
   isProcessing.value = false
   errorMessage.value = ''
   progress.value = { iteration: 0, total: 10, loss: 0 }
+}
+
+async function handleStyleSelect(result) {
+  showStyleSelector.value = false
+
+  if (result.type === 'preset') {
+    // 从后端获取预设图片作为 File
+    try {
+      const resp = await fetch(result.thumbnailUrl)
+      if (!resp.ok) throw new Error('Failed to fetch preset')
+      const blob = await resp.blob()
+      const file = new File([blob], result.file, { type: blob.type || 'image/png' })
+      styleImage.value = file
+      styleMeta.value = {
+        type: 'preset',
+        presetId: result.presetId,
+        name: result.name,
+      }
+      if (stylePreviewUrl.value) URL.revokeObjectURL(stylePreviewUrl.value)
+      stylePreviewUrl.value = URL.createObjectURL(file)
+    } catch (e) {
+      console.error('加载预设风格失败:', e)
+      errorMessage.value = '加载预设风格失败'
+    }
+  } else {
+    // 自定义上传
+    styleImage.value = result.file
+    styleMeta.value = {
+      type: 'custom',
+      name: result.name,
+    }
+    if (stylePreviewUrl.value) URL.revokeObjectURL(stylePreviewUrl.value)
+    stylePreviewUrl.value = URL.createObjectURL(result.file)
+  }
 }
 
 async function startTransfer() {
@@ -50,9 +101,13 @@ async function startTransfer() {
 
     const formData = new FormData()
     formData.append('content_image', contentImage.value)
-    formData.append('style_image', styleImage.value)
-    if (authStore.isLoggedIn) {
-      formData.append('style_type', 'custom')
+
+    if (styleMeta.value?.type === 'preset') {
+      formData.append('style_preset', styleMeta.value.presetId)
+      formData.append('style_name', styleMeta.value.name)
+    } else {
+      formData.append('style_image', styleImage.value)
+      formData.append('style_name', styleMeta.value?.name || '自定义风格')
     }
 
     // 获取 access token
@@ -156,7 +211,27 @@ onUnmounted(() => {
         <!-- 左栏：图片选择 -->
         <div class="left-panel">
           <ImageUploadBox label="选择内容图片" v-model="contentImage" />
-          <ImageUploadBox label="选择风格图片" v-model="styleImage" />
+
+          <!-- 风格选择：点击打开浮窗 -->
+          <div
+            class="upload-box style-trigger"
+            :class="{ empty: !styleImage, filled: !!styleImage }"
+            :style="stylePreviewUrl ? { backgroundImage: `url(${stylePreviewUrl})` } : {}"
+            @click="showStyleSelector = true"
+          >
+            <div v-if="!styleImage" class="placeholder">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 16V4m0 0L8 8m4-4l4 4" />
+                <path d="M3 15v2a2 2 0 002 2h14a2 2 0 002-2v-2" />
+              </svg>
+              <span class="label-text">选择风格图片</span>
+            </div>
+            <div v-else class="overlay">
+              <button class="overlay-btn" @click.stop="showStyleSelector = true">更换风格</button>
+              <button class="overlay-btn danger" @click.stop="styleImage = null; styleMeta = null">移除</button>
+            </div>
+            <span v-if="styleMeta" class="style-badge">{{ styleMeta.name }}</span>
+          </div>
 
           <button
             class="submit-btn"
@@ -197,6 +272,13 @@ onUnmounted(() => {
         </div>
       </main>
     </div>
+
+    <!-- 风格选择浮窗 -->
+    <StyleSelector
+      v-if="showStyleSelector"
+      @select="handleStyleSelect"
+      @close="showStyleSelector = false"
+    />
   </div>
 </template>
 
@@ -354,5 +436,110 @@ onUnmounted(() => {
   margin: 0;
   line-height: 1.6;
   font-size: 15px;
+}
+
+/* ---- 风格选择触发器 ---- */
+.style-trigger {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.3s, box-shadow 0.3s, background-color 0.3s;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.style-trigger.empty {
+  border: 2px dashed var(--border);
+  background: var(--bg);
+}
+
+.style-trigger.empty:hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  box-shadow: var(--shadow);
+}
+
+.style-trigger.filled {
+  border: none;
+  background-size: cover;
+  background-position: center;
+}
+
+.style-trigger .overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.style-trigger.filled:hover .overlay {
+  opacity: 1;
+}
+
+.style-trigger .overlay-btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  transition: background 0.2s;
+}
+
+.style-trigger .overlay-btn:hover {
+  background: #fff;
+}
+
+.style-trigger .overlay-btn.danger {
+  background: rgba(255, 80, 80, 0.85);
+  color: #fff;
+}
+
+.style-trigger .overlay-btn.danger:hover {
+  background: rgb(255, 60, 60);
+}
+
+.style-trigger .placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.style-trigger .upload-icon {
+  width: 40px;
+  height: 40px;
+  opacity: 0.5;
+}
+
+.style-trigger .label-text {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.style-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 2;
 }
 </style>
